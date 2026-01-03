@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VAT Calc (V12.0 Day/Night Mode)</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* --- 1. 核心變數與主題定義 --- */
+:root { 
+  /* --- 深色模式 (預設) --- */
+  --bg-app: #0f172a;       
+  --bg-sidebar: #1e293b;   
+  --bg-card: #1e293b;
+  --bg-input: #334155;     
+  --bg-hover: #334155;
+  --bg-row-even: #131c31;  /* 偶數行背景 */
+  --bg-void: rgba(68, 19, 19, 0.6); /* 作廢背景 */
+  
+  --border: #334155;       
+  --border-light: #475569;
+  
+  --text-main: #f1f5f9;    
+  --text-muted: #94a3b8;
+  
+  --primary: #3b82f6;      
+  --primary-glow: rgba(59, 130, 246, 0.3);
+  --success: #10b981;      
+  --danger: #ef4444;       
+  --warning: #f59e0b;
+  --highlight: #facc15;    /* 黃色高亮 */
+  
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --sb-w: 240px;
+}
+
+/* --- 淺色模式 (覆蓋變數) --- */
+html[data-theme="light"] {
+  --bg-app: #f1f5f9;       /* 淺灰背景 */
+  --bg-sidebar: #ffffff;   /* 白底 */
+  --bg-card: #ffffff;      /* 白卡片 */
+  --bg-input: #f8fafc;     /* 極淺灰輸入框 */
+  --bg-hover: #f1f5f9;     /* 懸停 */
+  --bg-row-even: #f8fafc;  /* 偶數行 */
+  --bg-void: #fee2e2;      /* 作廢背景 (粉紅) */
+
+  --border: #e2e8f0;       /* 淺灰邊框 */
+  --border-light: #cbd5e1; /* 稍深邊框 */
+
+  --text-main: #0f172a;    /* 深黑字 */
+  --text-muted: #64748b;   /* 灰字 */
+
+  --primary: #2563eb;      /* 藍色加深一點 */
+  --primary-glow: rgba(37, 99, 235, 0.2);
+  --highlight: #d97706;    /* 深橘黃，白底才看得清 */
+  
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+* { box-sizing: border-box; }
+html, body { 
+  margin: 0; padding: 0; width: 100%; height: 100%; 
+  background: var(--bg-app); color: var(--text-main); 
+  font-family: 'Inter', system-ui, sans-serif; 
+  overflow: hidden; display: flex; font-size: 15px;
+  user-select: none; 
+  transition: background 0.3s, color 0.3s; /* 平滑切換動畫 */
+}
+input, .val-cell, .diff-cell, .stat-num, .ft-val, .mono-font { font-family: 'JetBrains Mono', monospace; }
+
+/* --- 側邊欄 --- */
+#sidebar { 
+  width: var(--sb-w); background: var(--bg-sidebar); 
+  border-right: 1px solid var(--border); 
+  display: flex; flex-direction: column; flex-shrink: 0; 
+  transition: width 0.2s, background 0.3s, border 0.3s; z-index: 20; 
+}
+#sidebar.min { width: 70px; }
+.sb-header { 
+  height: 60px; border-bottom: 1px solid var(--border); 
+  display: flex; align-items: center; justify-content: space-between; padding: 0 15px; 
+}
+#sidebar.min .sb-header { justify-content: center; padding: 0; }
+.sb-title { 
+  font-size: 20px; font-weight: 700; color: var(--text-main); 
+  background: linear-gradient(135deg, var(--primary), #a78bfa); 
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+}
+#sidebar.min .sb-title { display: none; }
+
+/* Header Buttons (Resize & Theme) */
+.header-btns { display: flex; gap: 8px; }
+#sidebar.min .header-btns { flex-direction: column; gap: 5px; }
+
+.icon-btn { 
+  width: 32px; height: 32px; border: 1px solid var(--border-light); 
+  border-radius: 8px; background: transparent; color: var(--text-muted); 
+  cursor: pointer; display: grid; place-items: center; transition: all 0.2s; 
+}
+.icon-btn:hover { color: var(--text-main); background: var(--bg-hover); border-color: var(--text-muted); }
+
+.nav { flex: 1; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.nav-item { 
+  display: flex; align-items: center; height: 44px; cursor: pointer; 
+  padding: 0 15px; color: var(--text-muted); border-radius: 8px; 
+  transition: all 0.2s; font-weight: 500; 
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-main); }
+.nav-item.active { background: var(--primary); color: #fff; box-shadow: 0 4px 12px var(--primary-glow); }
+.nav-icon { font-size: 18px; margin-right: 12px; width: 24px; text-align: center;}
+#sidebar.min .nav-item { padding: 0; justify-content: center; }
+#sidebar.min .nav-item span { display: none; }
+#sidebar.min .nav-icon { margin: 0; }
+
+/* --- 主畫面 --- */
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.page-view { display: none; flex: 1; flex-direction: column; height: 100%; overflow: hidden; }
+.page-view.active { display: flex; }
+.content-wrap { flex: 1; padding: 15px 20px; display: flex; flex-direction: column; overflow: hidden; gap: 10px; }
+
+/* --- 工具列 --- */
+.toolbar { 
+  padding: 8px 15px; background: var(--bg-card); /* 改用卡片背景 */
+  border-bottom: 1px solid var(--border); 
+  display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; overflow-x: auto;
+  user-select: none; border-radius: 12px 12px 0 0; /* 配合下方表格圓角 */
+}
+.badge-group { display: flex; gap: 5px; background: var(--bg-app); padding: 3px; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0;}
+.count-badge { padding: 0 10px; height: 30px; border-radius: 5px; display: flex; align-items: center; color: var(--text-muted); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.count-badge b { color: var(--text-main); margin-left: 6px; font-size: 14px; font-weight: 700; }
+.c-taxable b { color: var(--primary); } .c-exempt b { color: var(--success); } .c-void b { color: var(--danger); }
+.badge-solo { background: var(--bg-app); border: 1px solid var(--border); margin-right: 5px; flex-shrink: 0; }
+select { background: var(--bg-input); color: var(--text-main); border: 1px solid var(--border-light); padding: 0 10px; height: 32px; border-radius: 6px; outline: none; }
+
+button { cursor: pointer; padding: 0 12px; height: 32px; border-radius: 6px; border: 1px solid var(--border-light); background: var(--bg-input); color: var(--text-main); font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+button:hover:not(:disabled) { background: var(--bg-hover); transform: translateY(-1px); border-color: var(--text-muted); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: var(--primary); border-color: transparent; color: #fff; }
+button.danger { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+/* 淺色模式下的 danger 按鈕文字加深 */
+html[data-theme="light"] button.danger { color: #dc2626; background: #fee2e2; border-color: #fecaca; }
+
+button.toggle-active { background: rgba(16, 185, 129, 0.1); border-color: var(--success); color: var(--success); }
+button.info-btn { color: var(--primary); border-color: var(--primary-glow); background: rgba(59, 130, 246, 0.1); }
+button.info-btn:hover:not(:disabled) { background: var(--primary); color: #fff; }
+
+/* --- 統計看板 --- */
+.stats-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 2px; margin-bottom: 2px; flex-shrink: 0; user-select: none; }
+.stats-board.s3-layout { grid-template-columns: 1fr 1fr; }
+.stat-box { 
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; 
+  padding: 12px 15px; position: relative; overflow: hidden; box-shadow: var(--shadow-md); 
+  cursor: pointer; transition: transform 0.1s;
+}
+.stat-box:hover { background: var(--bg-hover); }
+.stat-box:active { transform: scale(0.98); }
+.stat-box::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.stat-box.taxable::after, .stat-box[data-t="1"]::after { background: var(--primary); }
+.stat-box.exempt::after, .stat-box[data-t="2"]::after { background: var(--success); }
+.stat-box[data-t="3"]::after { background: var(--warning); }
+.stat-header { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); display: flex; justify-content: space-between; margin-bottom: 5px; }
+.stat-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 3px; }
+.stat-lbl { font-size: 13px; color: var(--text-muted); }
+.stat-num { font-size: 18px; font-weight: 700; color: var(--text-main); user-select: text; }
+.stat-row.grand { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.stat-row.grand .stat-lbl { color: var(--text-main); font-weight: bold; }
+.stat-row.grand .stat-num { color: var(--highlight); font-size: 20px; }
+
+/* --- 表格區 --- */
+.table-panel { 
+  flex: 1; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); 
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-md); 
+}
+#view-sales2 .table-container { display: flex; justify-content: center; background: var(--bg-app); }
+#view-sales2 table { width: auto; min-width: 600px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+
+.table-container { flex: 1; overflow-y: auto; background: var(--bg-app); position: relative; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+
+col.s2-idx { width: 60px; } col.s2-inp { width: 300px; } col.s2-del { width: 60px; }
+col.s3-idx { width: 50px; } col.s3-inp { width: 140px; } col.s3-tot { width: 160px; } col.s3-diff{ width: 80px; } col.s3-del { width: 50px; }
+col.p-idx { width: 50px; } col.p-inp { width: 200px; }
+
+thead th { 
+  position: sticky; top: 0; z-index: 10; background: var(--bg-sidebar); color: var(--text-muted); 
+  padding: 10px; text-align: right; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border);
+  user-select: none; 
+}
+thead th:first-child { text-align: center; }
+tbody tr { border-bottom: 1px solid var(--bg-sidebar); }
+tbody tr:nth-child(even) { background: var(--bg-row-even); }
+tbody tr:hover { background: var(--bg-hover); }
+tbody tr:focus-within { background: var(--primary-glow) !important; }
+tbody td { padding: 4px 6px; height: 46px; vertical-align: middle; }
+
+/* 防止選取 */
+td:first-child, td:last-child { user-select: none; }
+
+input[type="text"] {
+  width: 100%; height: 34px; max-width: 100%;
+  background: var(--bg-input); border: 1px solid var(--border-light); border-radius: 6px;
+  color: var(--text-main); font-size: 16px; padding: 0 10px; text-align: right; transition: all 0.2s;
+}
+input[type="text"]:focus { background: var(--bg-app); border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-glow); }
+input[type="text"]::placeholder { color: var(--text-muted); }
+
+.val-cell { text-align: right; padding-right: 15px; font-size: 16px; color: var(--text-muted); cursor: text; user-select: text; }
+td[data-tot] { color: var(--highlight); font-weight: bold; font-size: 17px; user-select: text; } 
+
+.diff-cell { text-align: right; padding-right: 15px; font-size: 14px; color: var(--text-muted); font-weight: 600; user-select: text; }
+.del-btn { width: 30px; height: 30px; margin: 0 auto; border: none; background: transparent; color: var(--text-muted); font-size: 18px; border-radius: 6px; display: flex; align-items: center; justify-content: center; user-select: none; }
+.del-btn:hover { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+
+/* --- 強效作廢樣式 --- */
+tr.void-row {
+  background: var(--bg-void) !important; 
+  border-left: 2px solid #ff7b72;
+}
+/* 深色模式下的作廢文字 */
+tr.void-row input, tr.void-row td, tr.void-row .val-cell {
+  text-decoration: line-through;
+  color: #ff7b72 !important; 
+}
+/* 淺色模式下的作廢文字 (更深紅) */
+html[data-theme="light"] tr.void-row input, 
+html[data-theme="light"] tr.void-row td, 
+html[data-theme="light"] tr.void-row .val-cell {
+  color: #b91c1c !important; 
+}
+
+tr.alert input { color: #fca5a5 !important; border-color: rgba(239,68,68,0.3); }
+html[data-theme="light"] tr.alert input { color: #dc2626 !important; }
+
+/* --- Footer --- */
+.footer { 
+  height: 70px; background: var(--bg-sidebar); border-top: 1px solid var(--border); 
+  display: flex; align-items: center; gap: 30px; padding: 0 30px; 
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.1); z-index: 30; user-select: none; 
+}
+.ft-info { display:flex; flex-direction:column; justify-content: center; }
+.ft-info label { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+.ft-info strong { color: var(--text-main); font-size: 16px; font-weight: 600; }
+.ft-right { display:flex; flex-direction:column; text-align:right; }
+.ft-val { font-size: 24px; font-weight: 700; color: var(--text-main); letter-spacing: 0.5px; user-select: text; }
+.ft-val.tax { color: #f472b6; }
+html[data-theme="light"] .ft-val.tax { color: #db2777; } /* 淺色模式稅額改為深粉紅 */
+.ft-val.highlight { color: var(--highlight); } 
+
+/* --- Modal (明細視窗) --- */
+#modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(2px); z-index: 100;
+  justify-content: center; align-items: center; user-select: none;
+}
+#modal-content {
+  background: var(--bg-card); width: 90%; max-width: 750px; height: 80%;
+  border-radius: 12px; border: 1px solid var(--border);
+  display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.modal-header {
+  padding: 15px 20px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+}
+.modal-title { font-size: 18px; font-weight: bold; color: var(--text-main); }
+.modal-close {
+  background: transparent; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; padding: 0; height: auto;
+}
+.modal-close:hover { color: var(--text-main); background: transparent; transform: none; }
+
+.modal-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-row-even); flex-shrink: 0; }
+.m-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-muted); font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.m-tab:hover { background: var(--bg-hover); color: var(--text-main); }
+.m-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-glow); }
+
+.modal-body { flex: 1; overflow-y: auto; padding: 0; }
+.modal-table { width: 100%; border-collapse: collapse; }
+.modal-table th { 
+  position: sticky; top: 0; background: var(--bg-sidebar); 
+  padding: 12px 10px; color: var(--text-muted); font-size: 12px; text-align: right; 
+  border-bottom: 1px solid var(--border); 
+}
+.modal-table td { padding: 12px 10px; border-bottom: 1px solid var(--border); color: var(--text-main); font-family: 'JetBrains Mono', monospace; text-align: right; font-size: 14px; user-select: text; }
+.modal-table tr:hover { background: var(--bg-hover); }
+.modal-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px; user-select: none; }
+.modal-time { font-size: 12px; color: var(--text-muted); font-family: sans-serif; text-align: center !important;}
+.c-1 { color: var(--primary); } .c-2 { color: var(--success); } .c-3 { color: var(--warning); }
+.modal-footer-row td { background: var(--bg-input); color: var(--text-main); font-weight: bold; border-top: 2px solid var(--border-light); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="modal-overlay">
+  <div id="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">批次輸入明細</div>
+      <button class="modal-close" onclick="purchase.closeLog()">×</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="m-tab active" onclick="purchase.filterLog('all', this)">全部</div>
+      <div class="m-tab" onclick="purchase.filterLog('1', this)">一類</div>
+      <div class="m-tab" onclick="purchase.filterLog('2', this)">二類</div>
+      <div class="m-tab" onclick="purchase.filterLog('3', this)">三類</div>
+    </div>
+    <div class="modal-body">
+      <table class="modal-table">
+        <thead>
+          <tr>
+            <th style="text-align:center">時間</th>
+            <th style="text-align:center">類別</th>
+            <th>筆數</th>
+            <th>批次銷售額</th>
+            <th>批次稅額</th>
+            <th style="color:var(--highlight)">批次總計</th>
+          </tr>
+        </thead>
+        <tbody id="modal-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="sidebar">
+  <div class="sb-header">
+    <div class="sb-title">VAT Calc</div>
+    <div class="header-btns">
+      <button id="themeSwitch" class="icon-btn" onclick="toggleTheme()" title="切換日/夜模式">🌞</button>
+      <button id="sideSwitch" class="icon-btn" onclick="toggleSidebar()" title="縮放">⇄</button>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-item active" onclick="switchTab('sales3')" id="nav-sales3"><div class="nav-icon">📄</div><span>銷項・三聯式</span></div>
+    <div class="nav-item" onclick="switchTab('sales2')" id="nav-sales2"><div class="nav-icon">🧾</div><span>銷項・二聯式</span></div>
+    <div class="nav-item" onclick="switchTab('purchase')" id="nav-purchase"><div class="nav-icon">📦</div><span>進項登錄 (100)</span></div>
+  </nav>
+</div>
+
+<div id="main">
+
+  <div id="view-sales3" class="page-view active">
+    <div class="content-wrap">
+      <div class="stats-board s3-layout">
+         <div class="stat-box taxable">
+           <div class="stat-header">應稅統計 <span style="font-size:16px">🔹</span></div>
+           <div class="stat-row"><span class="stat-lbl">銷售額</span><span class="stat-num" id="s3-taxableSale">0</span></div>
+           <div class="stat-row"><span class="stat-lbl">稅額</span><span class="stat-num" id="s3-taxableTax">0</span></div>
+         </div>
+         <div class="stat-box exempt">
+           <div class="stat-header">免稅統計 <span style="font-size:16px">🔸</span></div>
+           <div class="stat-row"><span class="stat-lbl">銷售額</span><span class="stat-num" id="s3-exemptSale">0</span></div>
+         </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="toolbar">
+          <button id="s3-btnToggle" onclick="sales3.toggleExemptLogic()">免稅不反紅: 開</button>
+          
+          <div class="badge-group">
+             <div class="count-badge c-taxable">應稅 <b id="s3-cntTaxable">0</b></div>
+             <div class="count-badge c-exempt">免稅 <b id="s3-cntExempt">0</b></div>
+             <div class="count-badge c-void">作廢 <b id="s3-cntVoid">0</b></div>
+          </div>
+          <div class="count-badge badge-solo">總計 <b id="s3-cntTotal">0</b> 筆</div>
+          <div style="flex:1"></div>
+          
+          <button id="s3-btnUndo" onclick="sales3.restore()" disabled>↩️ 復原</button>
+          <button class="danger" onclick="sales3.clearInputs()">🗑️ 清空全部</button>
+        </div>
+
+        <div class="table-container">
+          <table id="table-sales3">
+            <colgroup>
+              <col class="s3-idx"><col class="s3-inp"><col class="s3-inp"><col class="s3-tot"><col class="s3-diff"><col class="s3-del"><col style="width:auto">
+            </colgroup>
+            <thead>
+              <tr><th>#</th><th>銷售額</th><th>稅額 (手填)</th><th style="color:var(--highlight)">總計 (含稅)</th><th>差額</th><th></th><th></th></tr>
+            </thead>
+            <tbody id="s3-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div class="ft-info"><label>目前模式</label><strong>銷項・三聯式</strong></div>
+      <div style="flex:1"></div>
+      <div class="ft-right"><label>合計總計 (含稅)</label><span class="ft-val highlight" id="s3-ftGrandTotal">0</span></div>
+      <div class="ft-right"><label>應免合計銷售額</label><span class="ft-val" id="s3-ftSalesTotal">0</span></div>
+      <div class="ft-right"><label>合計稅額</label><span class="ft-val tax" id="s3-ftTax">0</span></div>
+    </div>
+  </div>
+
+  <div id="view-sales2" class="page-view">
+    <div class="content-wrap">
+      <div class="table-panel">
+        <div class="toolbar">
+          <div class="count-badge badge-solo">使用 <b id="s2-cntUsed">0</b></div>
+          <div class="count-badge c-void badge-solo">作廢 <b id="s2-cntVoid">0</b></div>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:var(--text-muted);margin-right:15px">💡 輸入「-」作廢</span>
+          <button id="s2-btnUndo" onclick="sales2.undo()" disabled>↩️ 復原</button>
+          <button class="danger" onclick="sales2.clearAll()">🗑️ 清空</button>
+        </div>
+        <div class="table-container">
+          <table id="table-sales2">
+            <colgroup><col class="s2-idx"><col class="s2-inp"><col class="s2-del"></colgroup>
+            <thead>
+              <tr><th>#</th><th>總額 (含稅)</th><th></th></tr>
+            </thead>
+            <tbody id="tbody-sales2"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div class="ft-info"><label>目前模式</label><strong>銷項・二聯式</strong></div>
+      <div style="flex:1"></div>
+      <div class="ft-right"><label>合計總額</label><span class="ft-val" id="s2-ftTotal">0</span></div>
+      <div class="ft-right"><label>合計稅額 (總額÷21)</label><span class="ft-val tax" id="s2-ftTax">0</span></div>
+    </div>
+  </div>
+
+  <div id="view-purchase" class="page-view">
+    <div class="content-wrap">
+      <div class="stats-board">
+        <div class="stat-box" data-t="1" onclick="purchase.showLog('1')" title="點擊查看一類明細">
+          <div class="stat-header">一類 <span style="font-size:16px">↗</span></div>
+          <div class="stat-row"><span>銷售額</span><span class="stat-num" id="s1T">0</span></div>
+          <div class="stat-row"><span>稅額</span><span class="stat-num" style="font-size:16px;opacity:0.8" id="s1X">0</span></div>
+          <div class="stat-row grand"><span>總計</span><span class="stat-num" id="s1Total">0</span></div>
+        </div>
+        <div class="stat-box" data-t="2" onclick="purchase.showLog('2')" title="點擊查看二類明細">
+          <div class="stat-header">二類 <span style="font-size:16px">↗</span></div>
+          <div class="stat-row"><span>銷售額</span><span class="stat-num" id="s2T">0</span></div>
+          <div class="stat-row"><span>稅額</span><span class="stat-num" style="font-size:16px;opacity:0.8" id="s2X">0</span></div>
+          <div class="stat-row grand"><span>總計</span><span class="stat-num" id="s2Total">0</span></div>
+        </div>
+        <div class="stat-box" data-t="3" onclick="purchase.showLog('3')" title="點擊查看三類明細">
+          <div class="stat-header">三類 <span style="font-size:16px">↗</span></div>
+          <div class="stat-row"><span>銷售額</span><span class="stat-num" id="s3T">0</span></div>
+          <div class="stat-row"><span>稅額</span><span class="stat-num" style="font-size:16px;opacity:0.8" id="s3X">0</span></div>
+          <div class="stat-row grand"><span>總計</span><span class="stat-num" id="s3Total">0</span></div>
+        </div>
+      </div>
+
+      <div class="table-panel">
+        <div class="toolbar">
+          <select id="p-catSel"><option value="1">一類</option><option value="2">二類</option><option value="3">三類</option></select>
+          <div class="count-badge badge-solo" style="margin-left:10px">已輸 <b id="p-usedCount">0</b> 筆</div>
+          
+          <button class="primary" onclick="purchase.doAdd(true)">💾 儲存並加入</button>
+          <button id="p-btnUndo" onclick="purchase.restore()" disabled>↩️ 復原</button>
+          
+          <div style="flex:1"></div>
+          <button class="danger" onclick="purchase.clearInputs()">🗑️ 輸入清空</button>
+          <button class="danger" onclick="purchase.clearStats()">⚠️ 統計清空</button>
+        </div>
+        <div class="table-container">
+          <table id="table-purchase">
+            <colgroup><col class="p-idx"><col class="p-inp"><col class="s3-tot"><col class="s3-diff"><col class="s3-del"><col style="width:auto"></colgroup>
+            <thead>
+              <tr><th>#</th><th>總額 (含稅)</th><th>銷售額 (未稅)</th><th>稅額</th><th></th><th></th></tr>
+            </thead>
+            <tbody id="tbody-purchase"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div class="ft-info"><label>當前類別</label><strong id="p-ftCat">一類</strong></div>
+      <div style="flex:1"></div>
+      <div class="ft-right"><label>批次總額</label><span class="ft-val" id="p-ftTotal">0</span></div>
+      <div class="ft-right"><label>批次稅額</label><span class="ft-val tax" id="p-ftTax">0</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ================== JS Logic ================== */
+const Utils = {
+  parse: (v) => { if(!v || String(v).trim()==='-') return 0; const n = Number(String(v).replace(/[, ]/g,'')); return Number.isFinite(n) ? n : 0; },
+  fmt: (n) => Number(n).toLocaleString('en-US', {maximumFractionDigits: 0}),
+  toggleSidebar: () => document.getElementById('sidebar').classList.toggle('min'),
+  bindEvents: (scope, handler) => {
+    scope.tbody.addEventListener('input', e => { if(e.target.tagName==='INPUT') handler.onInput(e.target); });
+    scope.tbody.addEventListener('focusin', e => { if(e.target.tagName==='INPUT') handler.onFocus(e.target); });
+    scope.tbody.addEventListener('focusout', e => { if(e.target.tagName==='INPUT') handler.onBlur(e.target); });
+    scope.tbody.addEventListener('click', e => { if(e.target.classList.contains('del-btn')) handler.delRow(e.target); });
+    if(!handler.customKey) {
+        scope.tbody.addEventListener('keydown', e => {
+          if(e.target.tagName!=='INPUT') return;
+          const tr = e.target.closest('tr');
+          if(e.key === 'Enter' || e.key === 'ArrowDown'){ e.preventDefault(); const next = tr.nextElementSibling; if(next) { const i = next.querySelector('input'); if(i) { i.focus(); i.select(); } } } 
+          else if(e.key === 'ArrowUp'){ e.preventDefault(); const prev = tr.previousElementSibling; if(prev) { const i = prev.querySelector('input'); if(i) { i.focus(); i.select(); } } }
+        });
+    } else { scope.tbody.addEventListener('keydown', e => { if(e.target.tagName==='INPUT') handler.onKey(e, e.target); }); }
+  }
+};
+window.toggleSidebar = Utils.toggleSidebar;
+window.switchTab = function(tabName) {
+  document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + tabName).classList.add('active');
+  document.getElementById('nav-' + tabName).classList.add('active');
+};
+
+/* --- Theme Logic --- */
+window.toggleTheme = function() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('vat_theme', next);
+  // 更新按鈕圖示
+  document.getElementById('themeSwitch').textContent = next === 'light' ? '🌙' : '🌞';
+};
+// Init Theme
+(function(){
+  const saved = localStorage.getItem('vat_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('themeSwitch').textContent = saved === 'light' ? '🌙' : '🌞';
+  });
+})();
+
+/* 三聯式 */
+const sales3 = (function() {
+  const LS_KEY = 'vat_sales_3ply_v10_4'; const ROWS = 100;
+  let hist = []; let exemptNoRed = true; const tbody = document.getElementById('s3-tbody');
+  function init() {
+    let html = '';
+    for(let i=1; i<=ROWS; i++){
+      const idxStr = String(i-1).padStart(2,'0');
+      html += `<tr><td style="text-align:center;color:#64748b">${idxStr}</td><td><input type="text" data-col="sale" inputmode="decimal" placeholder="-"></td><td><input type="text" data-col="tax" inputmode="decimal" placeholder="-"></td><td class="val-cell" data-tot>0</td><td class="diff-cell" data-diff>0</td><td><button class="del-btn" onclick="sales3.delRow(this)" tabindex="-1">×</button></td><td></td></tr>`;
+    }
+    tbody.innerHTML = html; loadLS(); Utils.bindEvents({tbody}, { ...handlers, customKey: true }); updateToggleBtn();
+  }
+  const handlers = {
+    onInput: (el) => { recalcRow(el.closest('tr')); recalcTotal(); },
+    onFocus: (el) => { saveHist(); const v = Utils.parse(el.value); if(v > 0) el.value = v; el.select(); },
+    onBlur: (el) => { const v = Utils.parse(el.value); if(v > 0) el.value = Utils.fmt(v); saveLS(); },
+    delRow: (btn) => { saveHist(); const tr = btn.closest('tr'); tr.querySelectorAll('input').forEach(i => i.value=''); recalcRow(tr); recalcTotal(); saveLS(); },
+    onKey: (e, el) => {
+      const tr = el.closest('tr'); const col = el.dataset.col;
+      if (e.key === 'Enter') { e.preventDefault();
+        if (col === 'sale') { const taxInp = tr.querySelector('input[data-col="tax"]'); if (taxInp) { taxInp.focus(); taxInp.select(); } } 
+        else if (col === 'tax') { const nextRow = tr.nextElementSibling; if (nextRow) { const nextSale = nextRow.querySelector('input[data-col="sale"]'); if (nextSale) { nextSale.focus(); nextSale.select(); } } } return;
+      }
+      if (e.key === 'ArrowRight' && col === 'sale') { e.preventDefault(); tr.querySelector('input[data-col="tax"]').focus(); }
+      else if (e.key === 'ArrowLeft' && col === 'tax') { e.preventDefault(); tr.querySelector('input[data-col="sale"]').focus(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); const next = tr.nextElementSibling; if(next) next.querySelector(`input[data-col="${col}"]`).focus(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); const prev = tr.previousElementSibling; if(prev) prev.querySelector(`input[data-col="${col}"]`).focus(); }
+    }
+  };
+  function toggleExemptLogic() { exemptNoRed = !exemptNoRed; updateToggleBtn(); tbody.querySelectorAll('tr').forEach(recalcRow); }
+  function updateToggleBtn() { const btn = document.getElementById('s3-btnToggle'); btn.textContent = '免稅不反紅: ' + (exemptNoRed ? '開' : '關'); btn.classList.toggle('toggle-active', exemptNoRed); }
+  function recalcRow(tr) {
+    const inpSale = tr.querySelector('input[data-col="sale"]'); const inpTax = tr.querySelector('input[data-col="tax"]');
+    const rawSale = inpSale.value.trim();
+    if(rawSale === '-') { tr.classList.add('void-row'); tr.classList.remove('alert'); tr.querySelector('[data-tot]').textContent = '作廢'; tr.querySelector('[data-diff]').textContent = '-'; return; }
+    tr.classList.remove('void-row');
+    const sale = Utils.parse(rawSale); const tax = Utils.parse(inpTax.value); const total = sale + tax;
+    let diff = 0; if(sale > 0 || tax > 0) diff = (sale * 0.05) - tax;
+    tr.querySelector('[data-tot]').textContent = (sale+tax)>0 ? Utils.fmt(total) : '0';
+    tr.querySelector('[data-diff]').textContent = (sale+tax)>0 ? diff.toFixed(2) : '0';
+    let isError = false; if(sale > 0 || tax > 0) { if (tax === 0 && exemptNoRed) isError = false; else if (Math.abs(diff) > 1) isError = true; }
+    if (isError) tr.classList.add('alert'); else tr.classList.remove('alert');
+  }
+  function recalcTotal() {
+    let taxableSale=0, taxableTax=0, exemptSale=0, totalSalesOnly=0, grandTotal=0; let cntTaxable=0, cntExempt=0, cntVoid=0, cntTotal=0;
+    tbody.querySelectorAll('tr').forEach(tr => {
+        const rawSale = tr.querySelector('input[data-col="sale"]').value.trim(); const tax = Utils.parse(tr.querySelector('input[data-col="tax"]').value);
+        if(rawSale === '-') { cntVoid++; } else { const sale = Utils.parse(rawSale); if(sale > 0 || tax > 0) { cntTotal++; totalSalesOnly += sale; grandTotal += (sale+tax); if (tax > 0) { taxableSale += sale; taxableTax += tax; cntTaxable++; } else { exemptSale += sale; cntExempt++; } } }
+    });
+    document.getElementById('s3-taxableSale').textContent = Utils.fmt(taxableSale); document.getElementById('s3-taxableTax').textContent = Utils.fmt(taxableTax); document.getElementById('s3-exemptSale').textContent = Utils.fmt(exemptSale); document.getElementById('s3-cntTaxable').textContent = cntTaxable; document.getElementById('s3-cntExempt').textContent = cntExempt; document.getElementById('s3-cntVoid').textContent = cntVoid; document.getElementById('s3-cntTotal').textContent = cntTotal + cntVoid; document.getElementById('s3-ftSalesTotal').textContent = Utils.fmt(totalSalesOnly); document.getElementById('s3-ftTax').textContent = Utils.fmt(taxableTax); document.getElementById('s3-ftGrandTotal').textContent = Utils.fmt(grandTotal);
+  }
+  function saveHist(){ const snapshot = []; tbody.querySelectorAll('tr').forEach(tr => { snapshot.push({ s: tr.querySelector('input[data-col="sale"]').value, t: tr.querySelector('input[data-col="tax"]').value }); }); if(hist.length > 0 && JSON.stringify(hist[hist.length-1]) === JSON.stringify(snapshot)) return; hist.push(snapshot); if(hist.length>20) hist.shift(); document.getElementById('s3-btnUndo').disabled = false; }
+  function saveLS(){ const data = []; tbody.querySelectorAll('tr').forEach(tr => { data.push({ s: tr.querySelector('input[data-col="sale"]').value, t: tr.querySelector('input[data-col="tax"]').value }); }); localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+  function loadLS(){ try { const s = localStorage.getItem(LS_KEY); if(s) { const data = JSON.parse(s); const rows = tbody.querySelectorAll('tr'); rows.forEach((tr, idx) => { if(data[idx]) { tr.querySelector('input[data-col="sale"]').value = data[idx].s; tr.querySelector('input[data-col="tax"]').value = data[idx].t; recalcRow(tr); } }); recalcTotal(); } } catch(e){} }
+  return { init, toggleExemptLogic, restore: function(){ if(!hist.length) return; const snapshot = hist.pop(); const rows = tbody.querySelectorAll('tr'); rows.forEach((tr, idx) => { if(snapshot[idx]) { tr.querySelector('input[data-col="sale"]').value = snapshot[idx].s; tr.querySelector('input[data-col="tax"]').value = snapshot[idx].t; } }); if(!hist.length) document.getElementById('s3-btnUndo').disabled = true; saveLS(); tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); }, clearInputs: function(){ if(confirm('確定清空表格？')) { saveHist(); tbody.querySelectorAll('input').forEach(i => i.value=''); tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); saveLS(); } } };
+})();
+
+/* 二聯式 */
+const sales2 = (function() {
+  const LS_KEY = 'vat_sales2_v9_7_total'; const ROWS = 50; const tbody = document.getElementById('tbody-sales2'); let historyStack = [];
+  function init() {
+    let html = '';
+    for(let i=0; i<ROWS; i++){ 
+      const idxStr = String(i).padStart(2,'0');
+      html += `<tr><td style="text-align:center;color:#64748b">${idxStr}</td><td><input type="text" inputmode="decimal" placeholder="-"></td><td><button class="del-btn" tabindex="-1">×</button></td></tr>`; 
+    }
+    tbody.innerHTML = html; loadLS(); Utils.bindEvents({tbody}, handlers);
+  }
+  function saveState() { const inputs = tbody.querySelectorAll('input'); const snapshot = Array.from(inputs).map(inp => inp.value); if(historyStack.length > 0 && JSON.stringify(historyStack[historyStack.length - 1]) === JSON.stringify(snapshot)) return; historyStack.push(snapshot); if(historyStack.length > 20) historyStack.shift(); document.getElementById('s2-btnUndo').disabled = historyStack.length === 0; }
+  function saveToLS() { const values = Array.from(tbody.querySelectorAll('input')).map(i => i.value); localStorage.setItem(LS_KEY, JSON.stringify(values)); }
+  function loadLS() { try { const raw = localStorage.getItem(LS_KEY); if(raw) { const arr = JSON.parse(raw); const inputs = tbody.querySelectorAll('input'); arr.forEach((val, idx) => { if(inputs[idx]) inputs[idx].value = val; recalcRow(inputs[idx].closest('tr')); }); recalcTotal(); } } catch(e){} }
+  function recalcRow(tr) { const inp = tr.querySelector('input'); const raw = inp.value.trim(); if(raw === '-') { tr.classList.add('void-row'); return; } tr.classList.remove('void-row'); }
+  function recalcTotal() { 
+      let bTotal=0, cntUsed=0, cntVoid=0; 
+      tbody.querySelectorAll('input').forEach(inp => { const raw = inp.value.trim(); if(raw === '-') { cntVoid++; } else { const v = Utils.parse(raw); if(v > 0) { cntUsed++; bTotal += v; } } }); 
+      const bTax = Math.round(bTotal / 21);
+      document.getElementById('s2-cntUsed').textContent = cntUsed; document.getElementById('s2-cntVoid').textContent = cntVoid; document.getElementById('s2-ftTotal').textContent = Utils.fmt(bTotal); document.getElementById('s2-ftTax').textContent = Utils.fmt(bTax); 
+  }
+  const handlers = {
+    onInput: (el) => { recalcRow(el.closest('tr')); recalcTotal(); },
+    onFocus: (el) => { saveState(); const v = Utils.parse(el.value); if(v>0) el.value = v; el.select(); },
+    onBlur: (el) => { const raw = el.value.trim(); if(raw !== '-') { const v = Utils.parse(raw); if(v>0) el.value = Utils.fmt(v); } saveToLS(); },
+    delRow: (btn) => { saveState(); btn.closest('tr').querySelector('input').value = ''; recalcRow(btn.closest('tr')); recalcTotal(); saveToLS(); }
+  };
+  return { init, undo: () => { if(!historyStack.length) return; const prev = historyStack.pop(); const inputs = tbody.querySelectorAll('input'); prev.forEach((val, idx) => { if(inputs[idx]) inputs[idx].value = val; recalcRow(inputs[idx].closest('tr')); }); recalcTotal(); document.getElementById('s2-btnUndo').disabled = historyStack.length === 0; saveToLS(); }, clearAll: () => { if(confirm('確定清空？')){ saveState(); tbody.querySelectorAll('input').forEach(i => i.value=''); tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); saveToLS(); } } };
+})();
+
+/* 進項 (Smart Undo + Clean UI) */
+const purchase = (function() {
+  const LS_LOG_KEY = 'vat_purchase_logs_v2_batch'; 
+  const ROWS = 100; 
+  let stats = { '1':{t:0,x:0}, '2':{t:0,x:0}, '3':{t:0,x:0} }; 
+  let logs = []; 
+  let hist = []; 
+  const tbody = document.getElementById('tbody-purchase');
+  
+  function init() {
+    let html = ''; for(let i=1; i<=ROWS; i++){ html += `<tr><td style="text-align:center;color:#64748b">${i}</td><td><input type="text" inputmode="decimal" placeholder="-"></td><td class="val-cell" data-net>0</td><td class="val-cell" data-tax>0</td><td><button class="del-btn" tabindex="-1">×</button></td><td></td></tr>`; }
+    tbody.innerHTML = html; 
+    try { const l = localStorage.getItem(LS_LOG_KEY); if(l) logs = JSON.parse(l); } catch(e){}
+    recalcStatsFromLogs();
+    Utils.bindEvents({tbody}, handlers);
+  }
+  
+  function recalcStatsFromLogs() {
+    stats = { '1':{t:0,x:0}, '2':{t:0,x:0}, '3':{t:0,x:0} };
+    logs.forEach(item => { if(stats[item.cat]) { stats[item.cat].t += item.sale; stats[item.cat].x += item.tax; } });
+    updateStatsUI();
+  }
+
+  const handlers = {
+    onInput: (el) => { recalcRow(el.closest('tr')); recalcTotal(); },
+    onFocus: (el) => { 
+        saveHist(null); 
+        const v = Utils.parse(el.value); if(v>0) el.value = v; el.select(); 
+    },
+    onBlur: (el) => { const v = Utils.parse(el.value); if(v>0) el.value = Utils.fmt(v); },
+    delRow: (btn) => { const tr = btn.closest('tr'); tr.querySelector('input').value = ''; recalcRow(tr); recalcTotal(); }
+  };
+  
+  function calcTax(v) { return Math.round((v/1.05)*0.05); }
+  function recalcRow(tr) { const v = Utils.parse(tr.querySelector('input').value); let tax = 0, net = 0; if(v > 0) { tax = calcTax(v); net = v - tax; } tr.querySelector('[data-net]').textContent = v>0 ? Utils.fmt(net) : '0'; tr.querySelector('[data-tax]').textContent = v>0 ? Utils.fmt(tax) : '0'; if(v > 0 && tax >= 500) tr.classList.add('alert'); else tr.classList.remove('alert'); }
+  function recalcTotal() { let bTotal=0, bTax=0, count=0; tbody.querySelectorAll('input').forEach(inp => { const v = Utils.parse(inp.value); if(v > 0) { count++; bTotal += v; bTax += calcTax(v); } }); document.getElementById('p-usedCount').textContent = count; document.getElementById('p-ftTotal').textContent = Utils.fmt(bTotal); document.getElementById('p-ftTax').textContent = Utils.fmt(bTax); const sel = document.getElementById('p-catSel'); document.getElementById('p-ftCat').textContent = sel.options[sel.selectedIndex].text; }
+  
+  function updateStatsUI(){ 
+    ['1','2','3'].forEach(k => { 
+        document.getElementById('s'+k+'T').textContent = Utils.fmt(stats[k].t); 
+        document.getElementById('s'+k+'X').textContent = Utils.fmt(stats[k].x); 
+        const total = stats[k].t + stats[k].x;
+        document.getElementById('s'+k+'Total').textContent = Utils.fmt(total);
+    }); 
+  }
+
+  function saveHist(logId = null){ 
+      const inputs = []; 
+      tbody.querySelectorAll('input').forEach(i => inputs.push(i.value)); 
+      hist.push({ i: inputs, logId: logId }); 
+      if(hist.length>20) hist.shift(); 
+      document.getElementById('p-btnUndo').disabled = false; 
+  }
+
+  // --- Log Functions ---
+  function showLog(filterCat, tabEl) {
+    const modal = document.getElementById('modal-overlay');
+    if(tabEl) {
+       document.querySelectorAll('.m-tab').forEach(el => el.classList.remove('active'));
+       tabEl.classList.add('active');
+    } else {
+       document.querySelectorAll('.m-tab').forEach(el => el.classList.remove('active'));
+       if(filterCat === 'all' || !filterCat) document.querySelector('.m-tab:first-child').classList.add('active');
+       else {
+           const idx = parseInt(filterCat);
+           document.querySelectorAll('.m-tab')[idx].classList.add('active');
+       }
+    }
+    const tb = document.getElementById('modal-tbody');
+    let html = '';
+    let displayLogs = logs;
+    if (filterCat && filterCat !== 'all') { displayLogs = logs.filter(item => item.cat === filterCat); }
+    displayLogs.sort((a,b) => b.id - a.id);
+
+    let totalSale = 0; let totalTax = 0; let totalGrand = 0;
+
+    if (displayLogs.length === 0) {
+      html = '<tr><td colspan="6" class="modal-empty">尚無紀錄</td></tr>';
+    } else {
+      displayLogs.forEach(item => {
+        let catLabel = item.cat === '1' ? '一類' : (item.cat === '2' ? '二類' : '三類');
+        let catClass = 'c-' + item.cat;
+        let batchTotal = item.sale + item.tax;
+        totalSale += item.sale; totalTax += item.tax; totalGrand += batchTotal;
+        html += `<tr><td class="modal-time">${item.time}</td><td style="text-align:center" class="${catClass}">${catLabel}</td><td style="text-align:right">${item.count} 筆</td><td>${Utils.fmt(item.sale)}</td><td>${Utils.fmt(item.tax)}</td><td style="color:var(--highlight);font-weight:bold">${Utils.fmt(batchTotal)}</td></tr>`;
+      });
+      html += `<tr class="modal-footer-row"><td colspan="3" style="text-align:center">合計</td><td>${Utils.fmt(totalSale)}</td><td style="color:var(--tax)">${Utils.fmt(totalTax)}</td><td style="color:var(--highlight)">${Utils.fmt(totalGrand)}</td></tr>`;
+    }
+    tb.innerHTML = html;
+    modal.style.display = 'flex';
+  }
+
+  function filterLog(cat, el) { showLog(cat, el); }
+  function closeLog() { document.getElementById('modal-overlay').style.display = 'none'; }
+
+  return { 
+    init, showLog, filterLog, closeLog, 
+    doAdd: (clear) => { 
+      let addNet=0, addX=0, count=0; 
+      const cat = document.getElementById('p-catSel').value;
+      tbody.querySelectorAll('input').forEach(inp => { 
+        const v = Utils.parse(inp.value); 
+        if(v > 0){ 
+          const t = calcTax(v); 
+          addNet += (v - t); addX += t; count++;
+        } 
+      }); 
+      if(count === 0){ return alert('無資料'); } 
+      
+      const now = new Date();
+      const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+      const newLogId = Date.now();
+      
+      saveHist(newLogId); 
+
+      logs.push({ id: newLogId, cat: cat, count: count, sale: addNet, tax: addX, time: timeStr });
+      localStorage.setItem(LS_LOG_KEY, JSON.stringify(logs));
+      
+      recalcStatsFromLogs();
+      
+      if(clear) { tbody.querySelectorAll('input').forEach(i => i.value=''); tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); const f = tbody.querySelector('tr:first-child input'); if(f) f.focus(); } 
+    }, 
+    restore: () => { 
+      if(!hist.length) return; 
+      const prev = hist.pop(); 
+      
+      const inputs = tbody.querySelectorAll('input'); 
+      inputs.forEach((inp, idx) => inp.value = prev.i[idx]); 
+      
+      if (prev.logId) {
+          logs = logs.filter(l => l.id !== prev.logId);
+          localStorage.setItem(LS_LOG_KEY, JSON.stringify(logs));
+          recalcStatsFromLogs(); 
+      }
+
+      if(!hist.length) document.getElementById('p-btnUndo').disabled = true; 
+      tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); 
+    }, 
+    clearInputs: () => { saveHist(null); tbody.querySelectorAll('input').forEach(i => i.value=''); tbody.querySelectorAll('tr').forEach(recalcRow); recalcTotal(); }, 
+    clearStats: () => { 
+      if(confirm('確定清空所有統計與明細紀錄?')){ 
+        saveHist(null); 
+        logs = []; 
+        localStorage.setItem(LS_LOG_KEY, JSON.stringify(logs));
+        recalcStatsFromLogs();
+      } 
+    } 
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', () => { sales3.init(); sales2.init(); purchase.init(); document.addEventListener('keydown', e => { if((e.ctrlKey||e.metaKey) && e.key==='z'){ e.preventDefault(); const active = document.querySelector('.page-view.active').id; if(active === 'view-sales3') sales3.restore(); if(active === 'view-sales2') sales2.undo(); if(active === 'view-purchase') purchase.restore(); } }); });
+</script>
+</body>
+</html>
